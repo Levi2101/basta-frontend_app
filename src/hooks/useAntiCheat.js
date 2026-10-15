@@ -12,6 +12,7 @@ export function useAntiCheat(faseJuego, onTrampaDetectada) {
         setTrampasDetectadas((prev) => {
           const nuevoTotal = prev + 1;
           setAlertaTrampa(true);
+          console.log('🚨 TRAMPA DETECTADA (Visibility Change). Strike #:', nuevoTotal);
           if (onTrampaDetectada) onTrampaDetectada(nuevoTotal);
           return nuevoTotal;
         });
@@ -23,6 +24,8 @@ export function useAntiCheat(faseJuego, onTrampaDetectada) {
         setTrampasDetectadas((prev) => {
           const nuevoTotal = prev + 1;
           setAlertaTrampa(true);
+          console.log('🚨 TRAMPA DETECTADA (Blur). Strike #:', nuevoTotal);
+          if (onTrampaDetectada) onTrampaDetectada(nuevoTotal);
           return nuevoTotal;
         });
       }

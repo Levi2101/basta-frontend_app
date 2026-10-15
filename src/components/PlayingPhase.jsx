@@ -1,5 +1,5 @@
 import React from 'react';
-import { Timer, Volume2, AlertTriangle, AlertCircle } from 'lucide-react';
+import { Timer, Volume2, AlertTriangle, ShieldAlert } from 'lucide-react';
 
 export function PlayingPhase({ 
   letraActual, 
@@ -9,15 +9,23 @@ export function PlayingPhase({
   setRespuestas, 
   onFinalizarRonda,
   conteoBasta,
-  iniciadorBasta
+  iniciadorBasta,
+  bloqueadoPorTrampa = false
 }) {
-  // Validar si el jugador completó TODAS las categorías
   const categoriasCompletas = categorias.every(
     cat => respuestas[cat] && respuestas[cat].trim().length > 0
   );
 
   return (
     <div className="space-y-6">
+      {/* Banner informativo de trampa detectada (sin bloquear la escritura) */}
+      {bloqueadoPorTrampa && (
+        <div className="bg-red-950/90 text-red-200 font-bold text-center py-3 px-4 rounded-xl shadow-lg border border-red-600 flex items-center justify-center gap-2 text-sm md:text-base animate-pulse">
+          <ShieldAlert size={20} className="text-red-400 shrink-0" />
+          <span>⚠️ Detectamos que saliste de la pantalla. Tus respuestas se marcarán automáticamente en ROJO en la revisión. ⚠️</span>
+        </div>
+      )}
+
       {/* Banner de Advertencia de ¡BASTA! */}
       {conteoBasta !== null && conteoBasta !== undefined && (
         <div className="bg-amber-500 text-slate-950 font-extrabold text-center py-3 px-4 rounded-xl shadow-lg border border-amber-300 animate-pulse flex items-center justify-center gap-2 text-sm md:text-base">
@@ -43,7 +51,7 @@ export function PlayingPhase({
         </div>
       </div>
 
-      {/* Inputs */}
+      {/* Inputs de Categorías (Permiten seguir escribiendo libremente) */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {categorias.map((cat, idx) => (
           <div key={idx} className="bg-slate-800/40 border border-slate-700/80 rounded-xl p-3 space-y-1 focus-within:border-amber-500/80 transition">
@@ -59,13 +67,6 @@ export function PlayingPhase({
           </div>
         ))}
       </div>
-
-      {/* Indicador de progreso */}
-      {!categoriasCompletas && conteoBasta === null && (
-        <p className="text-xs text-amber-400/80 text-center flex items-center justify-center gap-1.5 font-medium">
-          <AlertCircle size={14} /> Completa todas las categorías para poder gritar ¡BASTA!
-        </p>
-      )}
 
       {/* Botón Principal ¡BASTA! */}
       <button 

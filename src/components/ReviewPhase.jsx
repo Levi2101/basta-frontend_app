@@ -2,16 +2,21 @@ import React from 'react';
 import { Check, X, ShieldAlert, CheckCircle2 } from 'lucide-react';
 
 export function ReviewPhase({
-  letraActual,
-  categorias,
-  jugadores,
-  palabrasInvalidas,
-  confirmados,
-  socketId,
-  onTogglePalabra,
-  onConfirmar
+  letraActual = '',
+  categorias = [],
+  jugadores = [],
+  palabrasInvalidas = {},
+  confirmados = [],
+  socketId = '',
+  onTogglePalabra = () => { },
+  onConfirmar = () => { }
 }) {
-  const yaConfirmo = confirmados.includes(socketId);
+  const listaConfirmados = Array.isArray(confirmados) ? confirmados : [];
+  const yaConfirmo = listaConfirmados.includes(socketId);
+
+  const safeJugadores = Array.isArray(jugadores) ? jugadores : [];
+  const safeCategorias = Array.isArray(categorias) ? categorias : [];
+  const safeInvalidas = palabrasInvalidas || {};
 
   return (
     <div className="space-y-6">
@@ -32,31 +37,41 @@ export function ReviewPhase({
           <thead>
             <tr className="border-b border-slate-700 text-xs font-bold text-slate-400 uppercase tracking-wider">
               <th className="pb-3 px-2">Jugador</th>
-              {categorias.map((cat, idx) => (
+              {safeCategorias.map((cat, idx) => (
                 <th key={idx} className="pb-3 px-2 text-center">{cat}</th>
               ))}
               <th className="pb-3 px-2 text-center">Strikes</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-700/50 text-sm">
-            {jugadores.map((jugador) => {
+            {safeJugadores.map((jugador) => {
+              if (!jugador) return null;
               const esMiFila = jugador.id === socketId;
+              const nombreJugador = jugador.nombre || 'Jugador';
+              const totalStrikes = Number(jugador.strikes) || 0;
 
               return (
-                <tr key={jugador.id} className={esMiFila ? 'bg-amber-500/5 font-medium' : ''}>
+                <tr key={jugador.id || Math.random()} className={esMiFila ? 'bg-amber-500/5 font-medium' : ''}>
                   {/* Nombre Jugador */}
                   <td className="py-4 px-2 font-bold text-amber-400 whitespace-nowrap">
-                    {jugador.nombre} {esMiFila && <span className="text-xs text-amber-300/80 font-normal">(Tú)</span>}
+                    {nombreJugador} {esMiFila && <span className="text-xs text-amber-300/80 font-normal">(Tú)</span>}
                   </td>
 
                   {/* Respuestas por categoría */}
-                  {categorias.map((cat, idx) => {
-                    const respuesta = (jugador.respuestas && jugador.respuestas[cat]) || '';
-                    
-                    // Clave inmutable basada en el Nombre del Jugador + Categoría
-                    const keyNombre = `${jugador.nombre.toLowerCase()}-${cat}`;
-                    const estaInvalida = Boolean(palabrasInvalidas && palabrasInvalidas[keyNombre]);
-                    const estaVacia = !respuesta.trim();
+                  {safeCategorias.map((cat, idx) => {
+                    const respuestasObj = jugador.respuestas || {};
+                    const respuesta = respuestasObj[cat] || '';
+
+                    const nombreClean = nombreJugador.trim().toLowerCase();
+                    const keyNombre = `${nombreClean}-${cat}`;
+                    const keyId = `${jugador.id}-${cat}`;
+
+                    // Condición blindada: Si el jugador tiene strikes > 0, SE ANULA AUTOMÁTICAMENTE EN ROJO
+                    const estaInvalida = Boolean(
+                      safeInvalidas[keyNombre] ||
+                      safeInvalidas[keyId]
+                    );
+                    const estaVacia = !String(respuesta).trim();
 
                     return (
                       <td key={idx} className="py-3 px-2 text-center">
@@ -73,15 +88,13 @@ export function ReviewPhase({
                                   onTogglePalabra(jugador.id, cat);
                                 }
                               }}
-                              className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-mono font-bold transition shadow-sm ${
-                                esMiFila 
-                                  ? 'cursor-not-allowed opacity-80' 
+                              className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-mono font-bold transition shadow-sm ${esMiFila
+                                  ? 'cursor-not-allowed opacity-80'
                                   : 'cursor-pointer hover:scale-105 active:scale-95'
-                              } ${
-                                estaInvalida
+                                } ${estaInvalida
                                   ? 'bg-red-950/80 border-red-600 text-red-200'
                                   : 'bg-slate-900 border-slate-700 text-slate-200 hover:border-amber-500'
-                              }`}
+                                }`}
                               title={esMiFila ? "No puedes votar tus propias palabras" : "Haz clic para cambiar estado"}
                             >
                               <span className="capitalize">{respuesta}</span>
@@ -99,11 +112,10 @@ export function ReviewPhase({
 
                   {/* Strikes */}
                   <td className="py-3 px-2 text-center">
-                    <span className={`inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-lg ${
-                      jugador.strikes > 0 ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'text-slate-500'
-                    }`}>
-                      {jugador.strikes > 0 && <ShieldAlert size={12} />}
-                      {jugador.strikes || 0}
+                    <span className={`inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-lg ${totalStrikes > 0 ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'text-slate-500'
+                      }`}>
+                      {totalStrikes > 0 && <ShieldAlert size={12} />}
+                      {totalStrikes}
                     </span>
                   </td>
                 </tr>
@@ -119,8 +131,8 @@ export function ReviewPhase({
           <CheckCircle2 className="text-amber-400" size={18} />
           <span>
             Conformidad de la sala:{' '}
-            <strong className="text-amber-400">{confirmados.length}</strong> de{' '}
-            <strong className="text-white">{jugadores.length}</strong> jugadores listos.
+            <strong className="text-amber-400">{listaConfirmados.length}</strong> de{' '}
+            <strong className="text-white">{safeJugadores.length}</strong> jugadores listos.
           </span>
         </div>
 
@@ -128,13 +140,12 @@ export function ReviewPhase({
           type="button"
           disabled={yaConfirmo}
           onClick={onConfirmar}
-          className={`w-full md:w-auto px-6 py-3.5 rounded-xl font-extrabold text-sm transition shadow-lg flex items-center justify-center gap-2 ${
-            yaConfirmo
+          className={`w-full md:w-auto px-6 py-3.5 rounded-xl font-extrabold text-sm transition shadow-lg flex items-center justify-center gap-2 ${yaConfirmo
               ? 'bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 cursor-default'
               : 'bg-amber-500 hover:bg-amber-600 text-slate-950 cursor-pointer hover:scale-105 active:scale-95'
-          }`}
+            }`}
         >
-          {yaConfirmo ? '✓ Esperando a los demás...' : 'Estoy de acuerdo con la revisión'}
+          {yaConfirmo ? '✓ Esperando a los demás...' : 'Estoy de acuerdo con los puntos'}
         </button>
       </div>
     </div>

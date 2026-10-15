@@ -11,25 +11,21 @@ import { PodiumPhase } from './components/PodiumPhase';
 import { BlueprintModal } from './components/BlueprintModal';
 
 export default function App() {
-  // Configuración de Jugador y Sala
   const [nombreJugador, setNombreJugador] = useState('');
   const [codigoSala, setCodigoSala] = useState('');
   const [sala, setSala] = useState(null);
 
-  // Estados para el conteo regresivo de ¡BASTA! (10s)
   const [conteoBasta, setConteoBasta] = useState(null);
   const [iniciadorBasta, setIniciadorBasta] = useState('');
 
-  // Referencia mutable para el nombre del jugador
   const nombreRef = useRef(nombreJugador);
   useEffect(() => {
     nombreRef.current = nombreJugador;
   }, [nombreJugador]);
 
-  // Ajustes de Partida
   const [categorias, setCategorias] = useState(CATEGORIAS_DEFECTO);
   const [duracionRonda, setDuracionRonda] = useState(60);
-  const [faseJuego, setFaseJuego] = useState('lobby'); // 'lobby' | 'jugando' | 'revision' | 'podio'
+  const [faseJuego, setFaseJuego] = useState('lobby');
   const [letraActual, setLetraActual] = useState('');
   const [tiempoRestante, setTiempoRestante] = useState(60);
   const [respuestas, setRespuestas] = useState({});
@@ -37,23 +33,32 @@ export default function App() {
   const [palabrasInvalidas, setPalabrasInvalidas] = useState({});
   const [confirmadosRevision, setConfirmadosRevision] = useState([]);
 
-  // Guardar respuestas locales en tiempo real
+  // Referencia mutable para capturar las respuestas al instante
+  const respuestasRef = useRef(respuestas);
+  useEffect(() => {
+    respuestasRef.current = respuestas;
+  }, [respuestas]);
+
+  // Guardar respuestas locales en localStorage
   useEffect(() => {
     if (sala && faseJuego === 'jugando') {
       localStorage.setItem('basta_respuestas_locales', JSON.stringify(respuestas));
     }
   }, [respuestas, sala, faseJuego]);
 
-  // Manejador de Trampa (Tab-Switching)
+  // Manejador de Trampa instantáneo conectado con el hook
   const manejarTrampa = useCallback(() => {
     if (sala && faseJuego === 'jugando') {
-      socket.emit('registrar_trampa', { codigo: sala.codigo, respuestas });
+      console.log('🚨 TRAMPA ENVIADA AL SERVIDOR. Respuestas actuales:', respuestasRef.current);
+      socket.emit('registrar_trampa', { 
+        codigo: sala.codigo, 
+        respuestas: respuestasRef.current 
+      });
     }
-  }, [sala, faseJuego, respuestas]);
+  }, [sala, faseJuego]);
 
   const { trampasDetectadas, alertaTrampa, limpiarTrampas } = useAntiCheat(faseJuego, manejarTrampa);
 
-  // Guardar sesión en localStorage
   const guardarSesionLocal = (codigo, nombre) => {
     if (!nombre) return;
     localStorage.setItem('basta_sesion', JSON.stringify({
@@ -63,7 +68,6 @@ export default function App() {
     }));
   };
 
-  // Cerrar sesión
   const cerrarSesion = () => {
     localStorage.removeItem('basta_sesion');
     localStorage.removeItem('basta_respuestas_locales');
@@ -76,7 +80,6 @@ export default function App() {
     window.location.reload();
   };
 
-  // Escuchadores de Socket.io y Reconexión Automática
   useEffect(() => {
     const sesionGuardada = localStorage.getItem('basta_sesion');
     if (sesionGuardada) {
@@ -96,20 +99,20 @@ export default function App() {
       }
     }
 
-    socket.on('sala_creada', ({ codigo, sala }) => {
+    const onSalaCreada = ({ codigo, sala }) => {
       setCodigoSala(codigo);
       setSala(sala);
       guardarSesionLocal(codigo, nombreRef.current);
-    });
+    };
 
-    socket.on('actualizar_sala', (nuevaSala) => {
+    const onActualizarSala = (nuevaSala) => {
       setSala(nuevaSala);
       if (nuevaSala.estado) {
         setFaseJuego(nuevaSala.estado);
       }
-    });
+    };
 
-    socket.on('ronda_iniciada', ({ letraActual, duracionRonda, sala }) => {
+    const onRondaIniciada = ({ letraActual, duracionRonda, sala }) => {
       setLetraActual(letraActual);
       setTiempoRestante(duracionRonda);
       setSala(sala);
@@ -121,42 +124,56 @@ export default function App() {
       localStorage.removeItem('basta_respuestas_locales');
       limpiarTrampas();
       setFaseJuego('jugando');
-    });
+    };
 
-    // Escuchar el tiempo de la ronda principal emitido por el servidor
-    socket.on('tiempo_ronda_tick', ({ tiempoRestante }) => {
+    const onTiempoRondaTick = ({ tiempoRestante }) => {
       setTiempoRestante(tiempoRestante);
-    });
+    };
 
-    socket.on('basta_gritado', ({ iniciador, conteoBasta, sala }) => {
+    const onBastaGritado = ({ iniciador, conteoBasta, sala }) => {
       setSala(sala);
       setIniciadorBasta(iniciador);
       setConteoBasta(conteoBasta);
-    });
+    };
 
-    socket.on('conteo_basta_tick', ({ tiempoRestante }) => {
+    const onConteoBastaTick = ({ tiempoRestante }) => {
       setConteoBasta(tiempoRestante);
-    });
+    };
 
-    socket.on('ir_a_revision', ({ sala }) => {
+    const onIrARevision = ({ sala }) => {
+      const respLocales = localStorage.getItem('basta_respuestas_locales');
+      let respuestasAFirmar = respuestasRef.current;
+
+      if (respLocales) {
+        try {
+          respuestasAFirmar = JSON.parse(respLocales);
+        } catch (e) {
+          console.error('Error recuperando respuestas locales:', e);
+        }
+      }
+
+      socket.emit('guardar_respuestas_finales', { 
+        codigo: sala.codigo, 
+        respuestas: respuestasAFirmar 
+      });
+
       setSala(sala);
       setConteoBasta(null);
       setIniciadorBasta('');
       setFaseJuego('revision');
-    });
+    };
 
-    socket.on('revision_actualizada', ({ palabrasInvalidas, confirmadosRevision }) => {
-      // Clona el objeto para forzar la actualización de React
+    const onRevisionActualizada = ({ palabrasInvalidas, confirmadosRevision }) => {
       setPalabrasInvalidas({ ...(palabrasInvalidas || {}) });
       setConfirmadosRevision([...(confirmadosRevision || [])]);
-    });
+    };
 
-    socket.on('resultados_calculados', (salaActualizada) => {
+    const onResultadosCalculados = (salaActualizada) => {
       setSala(salaActualizada);
       setFaseJuego('podio');
-    });
+    };
 
-    socket.on('reconexion_exitosa', ({ codigo, sala }) => {
+    const onReconexionExitosa = ({ codigo, sala }) => {
       setSala(sala);
       setCodigoSala(codigo);
 
@@ -175,34 +192,45 @@ export default function App() {
       const miJugador = sala.jugadores.find(j => j.id === socket.id);
       const nombreFinal = miJugador ? miJugador.nombre : nombreRef.current;
       guardarSesionLocal(codigo, nombreFinal);
-    });
+    };
 
-    socket.on('error_reconexion', (msg) => {
+    const onErrorReconexion = () => {
       localStorage.removeItem('basta_sesion');
       localStorage.removeItem('basta_respuestas_locales');
       setFaseJuego('lobby');
       setSala(null);
-    });
+    };
 
-    
+    const onErrorSala = (msg) => alert(msg);
 
-    socket.on('error_sala', (msg) => alert(msg));
+    socket.on('sala_creada', onSalaCreada);
+    socket.on('actualizar_sala', onActualizarSala);
+    socket.on('ronda_iniciada', onRondaIniciada);
+    socket.on('tiempo_ronda_tick', onTiempoRondaTick);
+    socket.on('basta_gritado', onBastaGritado);
+    socket.on('conteo_basta_tick', onConteoBastaTick);
+    socket.on('ir_a_revision', onIrARevision);
+    socket.on('revision_actualizada', onRevisionActualizada);
+    socket.on('resultados_calculados', onResultadosCalculados);
+    socket.on('reconexion_exitosa', onReconexionExitosa);
+    socket.on('error_reconexion', onErrorReconexion);
+    socket.on('error_sala', onErrorSala);
 
     return () => {
-      socket.off('sala_creada');
-      socket.off('actualizar_sala');
-      socket.off('ronda_iniciada');
-      socket.off('tiempo_ronda_tick');
-      socket.off('basta_gritado');
-      socket.off('conteo_basta_tick');
-      socket.off('ir_a_revision');
-      socket.off('revision_actualizada');
-      socket.off('resultados_calculados');
-      socket.off('reconexion_exitosa');
-      socket.off('error_reconexion');
-      socket.off('error_sala');
+      socket.off('sala_creada', onSalaCreada);
+      socket.off('actualizar_sala', onActualizarSala);
+      socket.off('ronda_iniciada', onRondaIniciada);
+      socket.off('tiempo_ronda_tick', onTiempoRondaTick);
+      socket.off('basta_gritado', onBastaGritado);
+      socket.off('conteo_basta_tick', onConteoBastaTick);
+      socket.off('ir_a_revision', onIrARevision);
+      socket.off('revision_actualizada', onRevisionActualizada);
+      socket.off('resultados_calculados', onResultadosCalculados);
+      socket.off('reconexion_exitosa', onReconexionExitosa);
+      socket.off('error_reconexion', onErrorReconexion);
+      socket.off('error_sala', onErrorSala);
     };
-  }, [limpiarTrampas]);
+  }, []);
 
   const crearSala = () => {
     if (!nombreJugador.trim()) {
@@ -226,7 +254,7 @@ export default function App() {
   };
 
   const gritarBasta = () => {
-    if (sala) socket.emit('gritar_basta', { codigo: sala.codigo, respuestas });
+    if (sala) socket.emit('gritar_basta', { codigo: sala.codigo, respuestas: respuestasRef.current });
   };
 
   const togglePalabra = (jugadorId, categoria) => {
